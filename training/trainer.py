@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Tuple, Union
 
 import click
 import numpy as np
-from datasets import Dataset, load_dataset
+from datasets import Dataset, load_dataset, load_from_disk
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -41,19 +41,29 @@ from .consts import (
 
 logger = logging.getLogger(__name__)
 
-PROMPT_FORMAT = """{instruction}
+PROMPT_FORMAT = """Below is an instruction that describes a task. Write a response that appropriately completes the request.
 
-### Questions:
+### Instruction:
+{instruction}
 {input_text}
 
 ### Response:{output_text}
 """
+FILE_TO_INSTRUCTION_MAP = {
+    "/home/bo_ling/dataset/michelangelo_so_long.jsonl": "Please answer the following MA helpdesk questions:",
+    "/home/bo_ling/dataset/docstrans.jsonl": "Please finish the following doc translation tasks:",
+    "/home/bo_ling/dataset/eats_goldenset.jsonl": "Please answer Uber eats products relation questions:"
+}
 
-def create_data_set_from_json_list(json_list_file="/home/bo_ling/dolly/ma_data/so3_long.jsonl", 
-                                   max_question_length:int=500, max_answer_length:int=500):
+def create_data_set_from_json_list(json_list_file, 
+                                   max_question_length:int=500, max_answer_length:int=500,
+                                   file_to_instruction_map: Dict[str, str] = FILE_TO_INSTRUCTION_MAP):
     """
     Tokens are important to understand because GPT-J, like other language models, have a maximum context length of 2048 tokens, or roughly 1500 words.
     """
+    if json_list_file not in file_to_instruction_map:
+        all_files = ",".join(file_to_instruction_map.keys())
+        raise Exception(f"Please make sure that the input data file be in {all_files}")
     def gen():
         with open(json_list_file) as file:
             while True:
@@ -70,7 +80,7 @@ def create_data_set_from_json_list(json_list_file="/home/bo_ling/dolly/ma_data/s
                     # print(f"BAD DATA: {line}")
                     data = json.loads(line.replace("\\", ""))
 
-                instruction = "Answer the following MA helpdesk questions:"
+                instruction = file_to_instruction_map[json_list_file]
                 input_text = data["prompt"][:max_question_length]
                 output_text = "\n" + data["completion"][:max_answer_length]
                 text = PROMPT_FORMAT.format(instruction=instruction,input_text=input_text,output_text=output_text)
@@ -129,12 +139,11 @@ def preprocess_batch(batch: Dict[str, List], tokenizer: AutoTokenizer, max_lengt
 
 def load_training_dataset(training_data_id: str = DEFAULT_TRAINING_DATASET, split: str = "train", 
                          local_data_file_path: str="") -> Dataset:
-    logger.info(f"Loading {training_data_id} dataset")
     if local_data_file_path: 
-        print(f"===============loading local dataset from file: {local_data_file_path}=====================")
-        dataset: Dataset = create_data_set_from_json_list(local_data_file_path)
+        logger.info(f"===============Loading local dataset from file: {local_data_file_path}=====================")
+        dataset: Dataset = load_from_disk(local_data_file_path)[split]
     else:
-        print(f"===============loading public dataset: {training_data_id}=====================")
+        logger.info(f"===============Loading public dataset: {training_data_id}=====================")
         dataset: Dataset = load_dataset(training_data_id)[split]
     logger.info("Found %d rows", dataset.num_rows)
 
@@ -225,6 +234,7 @@ def train(
     test_size=1000,
 ):
     set_seed(seed)
+    gradient_checkpointing=False
 
     model, tokenizer = get_model_tokenizer(gradient_checkpointing=gradient_checkpointing)
 
