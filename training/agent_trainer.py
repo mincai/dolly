@@ -36,6 +36,7 @@ from .consts import (
 )
 
 END_KEY = "<|endofsentence|>"
+RESPONSE_KEY_NL = "\nagent:"
 logger = logging.getLogger(__name__)
 
 class DataCollatorForCompletionOnlyLM(DataCollatorForLanguageModeling):
@@ -45,6 +46,7 @@ class DataCollatorForCompletionOnlyLM(DataCollatorForLanguageModeling):
         # The prompt ends with the response key plus a newline.  We encode this and then try to find it in the
         # sequence of tokens.  This should just be a single token.
         response_token_ids = self.tokenizer.encode(RESPONSE_KEY_NL)
+        assert len(response_token_ids) == 1
 
         labels = batch["labels"].clone()
 
@@ -95,7 +97,7 @@ def load_tokenizer(pretrained_model_name_or_path: str = DEFAULT_INPUT_MODEL) -> 
     logger.info(f"Loading tokenizer for {pretrained_model_name_or_path}")
     tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path)
     tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.add_special_tokens({"additional_special_tokens": [END_KEY]})
+    tokenizer.add_special_tokens({"additional_special_tokens": [END_KEY, RESPONSE_KEY_NL]})
     return tokenizer
 
 
@@ -173,8 +175,8 @@ def train(
     # model is used.  The default model uses n_positions.  If no config settings can be found just default
     # to 1024 as this is probably supported by most models.
     conf = model.config
-    default_length = 2048
-    max_length: int = getattr(conf, "n_positions", getattr(conf, "seq_lenth", default_length))
+    default_length = 1024
+    max_length: int = 1024 # getattr(conf, "n_positions", getattr(conf, "seq_lenth", default_length))
 
     processed_dataset = preprocess_dataset(tokenizer=tokenizer, max_length=max_length, seed=seed,
                                            local_data_file_path=local_data_file_path)
