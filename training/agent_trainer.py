@@ -37,7 +37,26 @@ from .consts import (
 
 END_KEY = "<|endofsentence|>"
 RESPONSE_KEY_NL = "\nagent:"
+CHAT_START_KEY = "\n\n###\n\nagent"
 logger = logging.getLogger(__name__)
+
+def remove_first_agent(instruction):
+    return instruction[:instruction.find(CHAT_START_KEY)]
+
+def generate_data_from_chat(chat:str):
+    end_key = END_KEY
+    agent_head = RESPONSE_KEY_NL
+    chats_list=chat.split(end_key)
+    chats_list[0] = remove_first_agent(chats_list[0])
+    chat_data = []
+    current_question = []
+    for e in chats_list:
+        if e.startswith(agent_head):
+            intput = "\n".join(current_question)
+            chat_data.append(intput+e+end_key)
+        else:
+            current_question.append(e)
+    return chat_data
 
 class DataCollatorForCompletionOnlyLM(DataCollatorForLanguageModeling):
     def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
