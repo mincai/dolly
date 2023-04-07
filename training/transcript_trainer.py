@@ -33,30 +33,24 @@ from transformers import (
 from .consts import (
     DEFAULT_INPUT_MODEL,
     DEFAULT_SEED,
-    DEFAULT_TRAINING_DATASET,
-    END_KEY,
-    INSTRUCTION_KEY,
-    RESPONSE_KEY_NL,
 )
 
 logger = logging.getLogger(__name__)
+END_KEY = "### End"
+RESPONSE_KEY_NL = f"### Response:\n"
 
-PROMPT_FORMAT = """Below is an instruction that describes a task. Write a response that appropriately completes the request.
-
-### Instruction:
-{instruction}
+PROMPT_FORMAT = """{instruction}
 {input_text}
 
-### Response:{output_text}
-"""
+### %s:{output_text}
+"""%(RESPONSE_KEY_NL)
+
 FILE_TO_INSTRUCTION_MAP = {
-    "/home/bo_ling/dataset/michelangelo_so_long.jsonl": "Please answer the following MA helpdesk questions:",
     "/home/bo_ling/dataset/docstrans.jsonl": "Please finish the following doc translation tasks:",
-    "/home/bo_ling/dataset/eats_goldenset.jsonl": "Please answer Uber eats products relation questions:"
 }
 
 def create_data_set_from_json_list(json_list_file, 
-                                   max_question_length:int=2000, max_answer_length:int=2000,
+                                   max_question_length:int=500, max_answer_length:int=500,
                                    file_to_instruction_map: Dict[str, str] = FILE_TO_INSTRUCTION_MAP):
     """
     Tokens are important to understand because GPT-J, like other language models, have a maximum context length of 2048 tokens, or roughly 1500 words.
@@ -83,7 +77,7 @@ def create_data_set_from_json_list(json_list_file,
                 instruction = file_to_instruction_map[json_list_file]
                 input_text = data["prompt"][:max_question_length]
                 output_text = "\n" + data["completion"][:max_answer_length]
-                text = PROMPT_FORMAT.format(instruction=instruction,input_text=input_text,output_text=output_text)
+                text = PROMPT_FORMAT.format(instruction=instruction, input_text=input_text,output_text=output_text)
 
                 yield{
                     "instruction": instruction,
@@ -137,7 +131,7 @@ def preprocess_batch(batch: Dict[str, List], tokenizer: AutoTokenizer, max_lengt
     )
 
 
-def load_training_dataset(training_data_id: str = DEFAULT_TRAINING_DATASET, split: str = "train", 
+def load_training_dataset(training_data_id: str = "", split: str = "train", 
                          local_data_file_path: str="") -> Dataset:
     if local_data_file_path: 
         logger.info(f"===============Loading local dataset from file: {local_data_file_path}=====================")
@@ -243,7 +237,7 @@ def train(
     # to 1024 as this is probably supported by most models.
     conf = model.config
     default_length = 2048
-    max_length: int = 512 # getattr(conf, "n_positions", getattr(conf, "seq_lenth", default_length))
+    max_length: int = getattr(conf, "n_positions", getattr(conf, "seq_lenth", default_length))
 
     processed_dataset = preprocess_dataset(tokenizer=tokenizer, max_length=max_length, seed=seed,
                                            local_data_file_path=local_data_file_path)
