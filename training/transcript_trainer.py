@@ -42,7 +42,7 @@ RESPONSE_KEY_NL = f"### Response:\n"
 PROMPT_FORMAT = """{instruction}
 {input_text}
 
-### %s:{output_text}
+%s:{output_text}
 """%(RESPONSE_KEY_NL)
 
 FILE_TO_INSTRUCTION_MAP = {
@@ -158,7 +158,7 @@ def load_tokenizer(pretrained_model_name_or_path: str = DEFAULT_INPUT_MODEL) -> 
     logger.info(f"Loading tokenizer for {pretrained_model_name_or_path}")
     tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path)
     tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.add_special_tokens({"additional_special_tokens": [END_KEY, INSTRUCTION_KEY, RESPONSE_KEY_NL]})
+    tokenizer.add_special_tokens({"additional_special_tokens": [END_KEY, RESPONSE_KEY_NL]})
     return tokenizer
 
 
@@ -237,7 +237,7 @@ def train(
     # to 1024 as this is probably supported by most models.
     conf = model.config
     default_length = 2048
-    max_length: int = getattr(conf, "n_positions", getattr(conf, "seq_lenth", default_length))
+    max_length: int = 1024 # getattr(conf, "n_positions", getattr(conf, "seq_lenth", default_length))
 
     processed_dataset = preprocess_dataset(tokenizer=tokenizer, max_length=max_length, seed=seed,
                                            local_data_file_path=local_data_file_path)
