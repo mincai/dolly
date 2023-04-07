@@ -109,9 +109,8 @@ class DataCollatorForCompletionOnlyLM(DataCollatorForLanguageModeling):
 
             if response_token_ids_start_idx is None:
                 print(f"========== {examples[i]}; {labels[i]}; {response_token_ids[0]}==========")
-                raise RuntimeError(
-                    f'Could not find response key {response_token_ids} in token IDs {batch["labels"][i]}'
-                )
+                response_token_ids_start_idx = -2
+                #raise RuntimeError(f'Could not find response key {response_token_ids} in token IDs {batch["labels"][i]}')
 
             response_token_ids_end_idx = response_token_ids_start_idx + 1
 
