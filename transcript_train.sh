@@ -8,7 +8,7 @@ deepspeed \
      --epochs 1 \
      --local-output-dir /home/bo_ling/dolly_training/doc_transcript_pii_data_simplify_b2 \
      --local-data-file-path /home/bo_ling/dataset/doc_transcript_pii_data_simplify.hf \
-     --per-device-train-batch-size 2 \
-     --per-device-eval-batch-size 2 \
+     --per-device-train-batch-size 1 \
+     --per-device-eval-batch-size 1 \
      --test-size 100 \
      --lr 1e-5
