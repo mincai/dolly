@@ -2,12 +2,12 @@
 
 deepspeed \
      --include="localhost:2,3" \
-     --master_port 29500 \
+     --master_port 29501 \
      --module training.agent_trainer \
      --deepspeed config/ds_z3_bf16_config.json \
-     --epochs 1 \
-     --local-output-dir /home/bo_ling/dolly_training/agent_modeling_data_v1_expanded \
-     --local-data-file-path /home/bo_ling/dataset/modeling_data_v1_expanded.hf \
+     --epochs 2 \
+     --local-output-dir /home/bo_ling/dolly_training/modeling_data_v1 \
+     --local-data-file-path /home/bo_ling/dataset/modeling_data_v1.hf \
      --per-device-train-batch-size 1 \
      --per-device-eval-batch-size 1 \
      --test-size 100 \

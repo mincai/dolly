@@ -40,23 +40,25 @@ RESPONSE_KEY_NL = "\nagent:"
 CHAT_START_KEY = "\n\n###\n\nagent"
 logger = logging.getLogger(__name__)
 
-def remove_first_agent(instruction):
-    return instruction[:instruction.find(CHAT_START_KEY)]
+def split_first_agent(instruction):
+    pos = instruction.find(CHAT_START_KEY)
+    if pos != -1:
+        first_agent_reply = "\n" + instruction[pos+len(CHAT_START_KEY)-len(RESPONSE_KEY_NL):].replace("\n", "")
+    else:
+        first_agent_reply = ""
+    return instruction[:pos], first_agent_reply
 
-def generate_data_from_chat(chat:str):
+
+def process_chat(chat: str):
     end_key = END_KEY
-    agent_head = RESPONSE_KEY_NL
-    chats_list=chat.split(end_key)
-    chats_list[0] = remove_first_agent(chats_list[0])
-    chat_data = []
-    current_question = []
-    for e in chats_list:
-        if e.startswith(agent_head):
-            intput = "\n".join(current_question)
-            chat_data.append(intput+e+end_key)
-        else:
-            current_question.append(e)
-    return chat_data
+    chats_list = chat.split(end_key)
+    instruction, first_agent_reply = split_first_agent(chats_list[0])
+    if first_agent_reply:
+        chats_list = [instruction, first_agent_reply] + chats_list[1:]
+    else:
+        chats_list = [instruction] + chats_list[1:]
+    return chats_list
+
 
 class DataCollatorForCompletionOnlyLM(DataCollatorForLanguageModeling):
     def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
