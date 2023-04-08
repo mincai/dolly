@@ -42,7 +42,7 @@ RESPONSE_KEY_NL = f"### Response:\n"
 PROMPT_FORMAT = """{instruction}
 {input_text}
 
-%s:{output_text}
+%s{output_text}
 """%(RESPONSE_KEY_NL)
 
 FILE_TO_INSTRUCTION_MAP = {
