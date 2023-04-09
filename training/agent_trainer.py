@@ -185,6 +185,7 @@ def train(
     bf16,
     local_data_file_path="",
     test_size=1000,
+    max_seq_length: int = None,
 ):
     set_seed(seed)
     gradient_checkpointing=False
@@ -196,7 +197,14 @@ def train(
     # to 1024 as this is probably supported by most models.
     conf = model.config
     default_length = 1024
-    max_length: int = 1024 # getattr(conf, "n_positions", getattr(conf, "seq_lenth", default_length))
+    if not max_seq_length:
+        max_length: int = getattr(conf, "n_positions", getattr(conf, "seq_lenth", default_length))
+        print(f"===========Use model config max_length : {max_length}====================")
+          
+    else:
+        max_length: int = max_seq_length 
+        print(f"===========Use customer config max_length : {max_length}====================")
+    
 
     processed_dataset = preprocess_dataset(tokenizer=tokenizer, max_length=max_length, seed=seed,
                                            local_data_file_path=local_data_file_path)
@@ -269,7 +277,8 @@ def train(
 @click.option("--seed", type=int, default=DEFAULT_SEED, help="Seed to use for training.")
 @click.option("--deepspeed", type=str, default=None, help="Path to deepspeed config file.")
 @click.option("--local-data-file-path", type=str, default="", help="""The local training data with list of json with `prompt` and `completion` as the key""")
-@click.option("--test-size", type=int, default=1000, help="Path to deepspeed config file.")
+@click.option("--test-size", type=int, default=1000, help="Test size.")
+@click.option("--max-seq-length", type=int, default=None, help="Max sequence length.")
 @click.option(
     "--gradient-checkpointing/--no-gradient-checkpointing",
     is_flag=True,
