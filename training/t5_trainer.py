@@ -42,9 +42,10 @@ END_KEY = "<|endofoutput|>"
 
 
 class CustomerDataCollatorForSeq2Seq(DataCollatorForSeq2Seq):
-    def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
-        batch = super().torch_call(examples)
-        print(f" ==========DataCollatorForSeq2Seq: {batch}==========")
+    def __call__(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
+        batch = super().__call__(examples)
+        # check data only
+        # print(f" ==========DataCollatorForSeq2Seq: {batch}==========")
         return batch
 
 
