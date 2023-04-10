@@ -32,14 +32,10 @@ from transformers import (
     DataCollatorForSeq2Seq,
 )
 
-from .consts import (
-    DEFAULT_INPUT_MODEL,
-    DEFAULT_SEED,
-)
-
 logger = logging.getLogger(__name__)
 END_KEY = "<|endofoutput|>"
-
+DEFAULT_SEED = 42
+DEFAULT_INPUT_MODEL = "t5-3b"
 
 class CustomerDataCollatorForSeq2Seq(DataCollatorForSeq2Seq):
     def __call__(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
