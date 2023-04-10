@@ -3,7 +3,7 @@
 deepspeed \
      --include="localhost:0,1" \
      --master_port 29500 \
-     --module training.trainer \
+     --module training.t5_trainer \
      --deepspeed config/ds_z3_bf16_config.json \
      --epochs 5 \
      --local-output-dir /home/bo_ling/dolly_training/t5_doc_transcript \

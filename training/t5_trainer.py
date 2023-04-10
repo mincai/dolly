@@ -29,6 +29,7 @@ from transformers import (
     TrainingArguments,
     set_seed,
     T5ForConditionalGeneration,
+    DataCollatorForSeq2Seq,
 )
 
 from .consts import (
@@ -40,24 +41,10 @@ logger = logging.getLogger(__name__)
 END_KEY = "<|endofoutput|>"
 
 
-class DataCollatorForSeq2Seq(DataCollatorForLanguageModeling):
+class CustomerDataCollatorForSeq2Seq(DataCollatorForSeq2Seq):
     def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
         batch = super().torch_call(examples)
-        print(f" ==========DataCollatorForSeq2Seq: {examples}  {batch}==========")
-        labels = batch["labels"].clone()
-        labels_attention_mask = batch["labels_attention_mask"]
-
-        # The prompt ends with the response key plus a newline.  We encode this and then try to find it in the
-        # sequence of tokens.  This should just be a single token.
-        for i in range(len(examples)):
-            response_token_ids_start_idx = None
-            for idx in np.where(labels_attention_mask[i] == 0):
-                labels[i, idx] = -100
-            # Make pytorch loss function ignore all tokens up through the end of the response key
-        batch["labels"] = labels
-
         print(f" ==========DataCollatorForSeq2Seq: {batch}==========")
-        raise RuntimeError(f'STOP')
         return batch
 
 
@@ -67,9 +54,7 @@ def preprocess_batch(batch: Dict[str, List], tokenizer: AutoTokenizer, max_lengt
     labels = tokenizer(batch["output_text"], max_length=max_length, truncation=True)
     return {
         "input_ids": inputs.input_ids,
-        "attention_mask": inputs.attention_mask,
         "labels": labels.input_ids,
-        "labels_attention_mask": labels.attention_mask,
     }
 
 
@@ -179,11 +164,13 @@ def train(
 
     processed_dataset = preprocess_dataset(tokenizer=tokenizer, max_length=max_length, seed=seed,
                                            local_data_file_path=local_data_file_path)
+    
+    print(f" ============= processed_dataset: {processed_dataset[0]}=============")
 
     split_dataset = processed_dataset.train_test_split(test_size=test_size, seed=seed)
 
-    data_collator = DataCollatorForSeq2Seq(
-        tokenizer=tokenizer, mlm=False, return_tensors="pt", pad_to_multiple_of=8
+    data_collator = CustomerDataCollatorForSeq2Seq(
+        tokenizer=tokenizer, return_tensors="pt", pad_to_multiple_of=8
     )
 
     if not dbfs_output_dir:
@@ -215,6 +202,8 @@ def train(
     )
 
     logger.info("Instantiating Trainer")
+    model.config.decoder_start_token_id=0
+    print(f"=======model.config.decoder_start_token_id: {model.config.decoder_start_token_id}=======")
 
     trainer = Trainer(
         model=model,
