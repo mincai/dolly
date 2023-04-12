@@ -183,6 +183,7 @@ def train(
     gradient_checkpointing,
     local_rank,
     bf16,
+    pretrained_model_name=DEFAULT_INPUT_MODEL,
     local_data_file_path="",
     test_size=1000,
     max_seq_length: int = None,
@@ -190,7 +191,8 @@ def train(
     set_seed(seed)
     gradient_checkpointing=False
 
-    model, tokenizer = get_model_tokenizer(gradient_checkpointing=gradient_checkpointing)
+    model, tokenizer = get_model_tokenizer(pretrained_model_name_or_path=pretrained_model_name,
+                                           gradient_checkpointing=gradient_checkpointing)
 
     # Use the same max length that the model supports.  Try a couple different keys in case a different
     # model is used.  The default model uses n_positions.  If no config settings can be found just default
@@ -277,6 +279,7 @@ def train(
 @click.option("--seed", type=int, default=DEFAULT_SEED, help="Seed to use for training.")
 @click.option("--deepspeed", type=str, default=None, help="Path to deepspeed config file.")
 @click.option("--local-data-file-path", type=str, default="", help="""The local training data with list of json with `prompt` and `completion` as the key""")
+@click.option("--pretrained-model-name", type=str, default=DEFAULT_INPUT_MODEL, help="""Model name""")
 @click.option("--test-size", type=int, default=1000, help="Test size.")
 @click.option("--max-seq-length", type=int, default=None, help="Max sequence length.")
 @click.option(
