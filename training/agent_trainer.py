@@ -200,8 +200,8 @@ def train(
     conf = model.config
     default_length = 1024
     if not max_seq_length:
-        max_length: int = getattr(conf, "n_positions", getattr(conf, "seq_lenth", default_length))
-        print(f"===========Use model config max_length : {max_length}====================")
+        max_length: int = getattr(conf, "n_positions", getattr(conf, "seq_lenth", getattr(conf, "max_position_embeddings", default_length)))
+        print(f"===========Use model config max_length {model.config} : {max_length}====================")
           
     else:
         max_length: int = max_seq_length 
