@@ -160,7 +160,7 @@ def preprocess_dataset(tokenizer: AutoTokenizer, max_length: int, seed=DEFAULT_S
     dataset = dataset.map(
         _preprocessing_function,
         batched=True,
-        remove_columns=["text"],
+        remove_columns=["text", "ticket_uuid"],
     )
 
     logger.info("Shuffling dataset")
