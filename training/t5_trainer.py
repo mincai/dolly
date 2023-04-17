@@ -165,6 +165,7 @@ def train(
     print(f" ============= processed_dataset: {processed_dataset[0]}=============")
 
     split_dataset = processed_dataset.train_test_split(test_size=test_size, seed=seed)
+    print(f" ========== split_dataset: {split_dataset} ==========")
 
     data_collator = CustomerDataCollatorForSeq2Seq(
         tokenizer=tokenizer, return_tensors="pt", pad_to_multiple_of=8
