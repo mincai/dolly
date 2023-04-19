@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+import torch
 import json
 from functools import partial
 from typing import Any, Dict, List, Tuple, Union
@@ -126,7 +127,9 @@ def load_model(
 ) -> AutoModelForCausalLM:
     logger.info(f"Loading model for {pretrained_model_name_or_path}")
     model = AutoModelForCausalLM.from_pretrained(
-        pretrained_model_name_or_path, trust_remote_code=True, use_cache=False if gradient_checkpointing else True
+        pretrained_model_name_or_path, trust_remote_code=True, 
+        torch_dtype=torch.float16,
+        use_cache=False if gradient_checkpointing else True
     )
     return model
 
@@ -186,6 +189,7 @@ def train(
     pretrained_model_name=DEFAULT_INPUT_MODEL,
     local_data_file_path="",
     test_size=1000,
+    max_frozen_layers: int = 30,
     max_seq_length: int = None,
 ):
     set_seed(seed)
@@ -224,8 +228,7 @@ def train(
         output_dir=local_output_dir,
         per_device_train_batch_size=per_device_train_batch_size,
         per_device_eval_batch_size=per_device_eval_batch_size,
-        fp16=False,
-        bf16=bf16,
+        fp16=True,
         learning_rate=lr,
         num_train_epochs=epochs,
         deepspeed=deepspeed,
@@ -246,6 +249,28 @@ def train(
     )
 
     logger.info("Instantiating Trainer")
+    
+    frozen_layers_prefix = [f"gpt_neox.layers.{i}" for i in range(max_frozen_layers)] + ["embed_in"]
+    print(f"========== Frozen_layers_prefix:\n {frozen_layers_prefix}")
+    
+    model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+    params = sum([np.prod(p.size()) for p in model_parameters])
+    print(f" ======= Before frozen earlier layer, total trainable parameters: {params} =================== ")
+    
+    trainable_layers = []
+    for name, param in model.named_parameters():
+        trainable = True
+        for layer_prefix in frozen_layers_prefix:
+            if layer_prefix in name:
+                param.requires_grad = False
+                trainable = False
+        if trainable:
+            trainable_layers.append(name)
+    
+    model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+    params = sum([np.prod(p.size()) for p in model_parameters])
+    print(f" ========= After frozen earlier layer, trainable parameters: {params}! There are {trainable_layers} ")
+    
 
     trainer = Trainer(
         model=model,
@@ -282,6 +307,7 @@ def train(
 @click.option("--pretrained-model-name", type=str, default=DEFAULT_INPUT_MODEL, help="""Model name""")
 @click.option("--test-size", type=int, default=1000, help="Test size.")
 @click.option("--max-seq-length", type=int, default=None, help="Max sequence length.")
+@click.option("--max-frozen-layers", type=int, default=0, help="Max sequence length.")
 @click.option(
     "--gradient-checkpointing/--no-gradient-checkpointing",
     is_flag=True,
