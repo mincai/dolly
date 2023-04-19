@@ -250,7 +250,7 @@ def train(
 
     logger.info("Instantiating Trainer")
     
-    frozen_layers_prefix = [f"gpt_neox.layers.{i}" for i in range(max_frozen_layers)] + ["embed_in"]
+    frozen_layers_prefix = [f"gpt_neox.layers.{i}." for i in range(max_frozen_layers)] + ["embed_in"]
     print(f"========== Frozen_layers_prefix:\n {frozen_layers_prefix}")
     
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
@@ -258,6 +258,7 @@ def train(
     print(f" ======= Before frozen earlier layer, total trainable parameters: {params} =================== ")
     
     trainable_layers = []
+    non_trainable_layers = []
     for name, param in model.named_parameters():
         trainable = True
         for layer_prefix in frozen_layers_prefix:
@@ -266,10 +267,13 @@ def train(
                 trainable = False
         if trainable:
             trainable_layers.append(name)
+        else:
+            non_trainable_layers.append(name)
     
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     params = sum([np.prod(p.size()) for p in model_parameters])
     print(f" ========= After frozen earlier layer, trainable parameters: {params}! There are {trainable_layers} ")
+    print(f"========= Non-trainable parameters are {non_trainable_layers}!")
     
 
     trainer = Trainer(

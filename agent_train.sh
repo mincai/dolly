@@ -10,6 +10,6 @@ deepspeed \
      --local-data-file-path /home/bo_ling/dataset/modeling_data_v2.hf \
      --per-device-train-batch-size 1 \
      --per-device-eval-batch-size 1 \
-     --max-frozen-layers 20 \
+     --max-frozen-layers 30 \
      --test-size 100 \
      --lr 1e-5
