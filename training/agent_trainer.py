@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import logging
+import torch
 import json
 from functools import partial
 from typing import Any, Dict, List, Tuple, Union
@@ -33,67 +34,31 @@ from transformers import (
 from .consts import (
     DEFAULT_INPUT_MODEL,
     DEFAULT_SEED,
-    DEFAULT_TRAINING_DATASET,
-    END_KEY,
-    INSTRUCTION_KEY,
-    RESPONSE_KEY_NL,
 )
 
+END_KEY = "<|endofsentence|>"
+RESPONSE_KEY_NL = "\nagent:"
+CHAT_START_KEY = "\n\n###\n\nagent"
 logger = logging.getLogger(__name__)
 
-PROMPT_FORMAT = """Below is an instruction that describes a task. Write a response that appropriately completes the request.
+def split_first_agent(instruction):
+    pos = instruction.find(CHAT_START_KEY)
+    if pos != -1:
+        first_agent_reply = "\n" + instruction[pos+len(CHAT_START_KEY)-len(RESPONSE_KEY_NL):].replace("\n", "")
+    else:
+        first_agent_reply = ""
+    return instruction[:pos], first_agent_reply
 
-### Instruction:
-{instruction}
-{input_text}
 
-### Response:{output_text}
-"""
-FILE_TO_INSTRUCTION_MAP = {
-    "/home/bo_ling/dataset/michelangelo_so_long.jsonl": "Please answer the following MA helpdesk questions:",
-    "/home/bo_ling/dataset/docstrans.jsonl": "Please finish the following doc translation tasks:",
-    "/home/bo_ling/dataset/eats_goldenset.jsonl": "Please answer Uber eats products relation questions:"
-}
-
-def create_data_set_from_json_list(json_list_file, 
-                                   max_question_length:int=2000, max_answer_length:int=2000,
-                                   file_to_instruction_map: Dict[str, str] = FILE_TO_INSTRUCTION_MAP):
-    """
-    Tokens are important to understand because GPT-J, like other language models, have a maximum context length of 2048 tokens, or roughly 1500 words.
-    """
-    if json_list_file not in file_to_instruction_map:
-        all_files = ",".join(file_to_instruction_map.keys())
-        raise Exception(f"Please make sure that the input data file be in {all_files}")
-    def gen():
-        with open(json_list_file) as file:
-            while True:
-                line = file.readline()
-
-                # if line is empty
-                # end of file is reached
-                if not line:
-                    break 
-                try:
-                    data = json.loads(line)
-
-                except:
-                    # print(f"BAD DATA: {line}")
-                    data = json.loads(line.replace("\\", ""))
-
-                instruction = file_to_instruction_map[json_list_file]
-                input_text = data["prompt"][:max_question_length]
-                output_text = "\n" + data["completion"][:max_answer_length]
-                text = PROMPT_FORMAT.format(instruction=instruction,input_text=input_text,output_text=output_text)
-
-                yield{
-                    "instruction": instruction,
-                    "input": input_text, 
-                    "output": output_text,
-                    "text": text
-                }
-    dataset = Dataset.from_generator(gen)
-    return dataset
-
+def process_chat(chat: str):
+    end_key = END_KEY
+    chats_list = chat.split(end_key)
+    instruction, first_agent_reply = split_first_agent(chats_list[0])
+    if first_agent_reply:
+        chats_list = [instruction, first_agent_reply] + chats_list[1:]
+    else:
+        chats_list = [instruction] + chats_list[1:]
+    return chats_list
 
 
 class DataCollatorForCompletionOnlyLM(DataCollatorForLanguageModeling):
@@ -103,6 +68,7 @@ class DataCollatorForCompletionOnlyLM(DataCollatorForLanguageModeling):
         # The prompt ends with the response key plus a newline.  We encode this and then try to find it in the
         # sequence of tokens.  This should just be a single token.
         response_token_ids = self.tokenizer.encode(RESPONSE_KEY_NL)
+        assert len(response_token_ids) == 1
 
         labels = batch["labels"].clone()
 
@@ -115,9 +81,8 @@ class DataCollatorForCompletionOnlyLM(DataCollatorForLanguageModeling):
 
             if response_token_ids_start_idx is None:
                 print(f"========== {examples[i]}; {labels[i]}; {response_token_ids[0]}==========")
-                raise RuntimeError(
-                    f'Could not find response key {response_token_ids} in token IDs {batch["labels"][i]}'
-                )
+                response_token_ids_start_idx = -2
+                #raise RuntimeError(f'Could not find response key {response_token_ids} in token IDs {batch["labels"][i]}')
 
             response_token_ids_end_idx = response_token_ids_start_idx + 1
 
@@ -137,8 +102,8 @@ def preprocess_batch(batch: Dict[str, List], tokenizer: AutoTokenizer, max_lengt
     )
 
 
-def load_training_dataset(training_data_id: str = DEFAULT_TRAINING_DATASET, split: str = "train", 
-                         local_data_file_path: str="") -> Dataset:
+def load_training_dataset(training_data_id: str = "", split: str = "train",
+                          local_data_file_path:str="") -> Dataset:
     if local_data_file_path: 
         logger.info(f"===============Loading local dataset from file: {local_data_file_path}=====================")
         dataset: Dataset = load_from_disk(local_data_file_path)[split]
@@ -147,24 +112,13 @@ def load_training_dataset(training_data_id: str = DEFAULT_TRAINING_DATASET, spli
         dataset: Dataset = load_dataset(training_data_id)[split]
     logger.info("Found %d rows", dataset.num_rows)
 
-    # Remove empty responses
-    response_key_stripped = RESPONSE_KEY_NL.strip()
-    dataset = dataset.filter(lambda rec: not rec["text"].strip().endswith(response_key_stripped))
-
-    def _func(rec):
-        rec["text"] += f"\n\n{END_KEY}"
-        return rec
-
-    dataset = dataset.map(_func)
-
     return dataset
-
 
 def load_tokenizer(pretrained_model_name_or_path: str = DEFAULT_INPUT_MODEL) -> PreTrainedTokenizer:
     logger.info(f"Loading tokenizer for {pretrained_model_name_or_path}")
     tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path)
     tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.add_special_tokens({"additional_special_tokens": [END_KEY, INSTRUCTION_KEY, RESPONSE_KEY_NL]})
+    tokenizer.add_special_tokens({"additional_special_tokens": [END_KEY, RESPONSE_KEY_NL]})
     return tokenizer
 
 
@@ -173,7 +127,9 @@ def load_model(
 ) -> AutoModelForCausalLM:
     logger.info(f"Loading model for {pretrained_model_name_or_path}")
     model = AutoModelForCausalLM.from_pretrained(
-        pretrained_model_name_or_path, trust_remote_code=True, use_cache=False if gradient_checkpointing else True
+        pretrained_model_name_or_path, trust_remote_code=True, 
+        torch_dtype=torch.float16,
+        use_cache=False if gradient_checkpointing else True
     )
     return model
 
@@ -189,7 +145,7 @@ def get_model_tokenizer(
 
 
 def preprocess_dataset(tokenizer: AutoTokenizer, max_length: int, seed=DEFAULT_SEED, 
-                      local_data_file_path: str = "") -> Dataset:
+                       local_data_file_path: str = "") -> Dataset:
     """Loads the training dataset and tokenizes it so it is ready for training.
 
     Args:
@@ -207,7 +163,7 @@ def preprocess_dataset(tokenizer: AutoTokenizer, max_length: int, seed=DEFAULT_S
     dataset = dataset.map(
         _preprocessing_function,
         batched=True,
-        remove_columns=["instruction", "input", "output", "text"],
+        remove_columns=["text", "ticket_uuid"],
     )
 
     logger.info("Shuffling dataset")
@@ -230,20 +186,31 @@ def train(
     gradient_checkpointing,
     local_rank,
     bf16,
+    pretrained_model_name=DEFAULT_INPUT_MODEL,
     local_data_file_path="",
     test_size=1000,
+    max_frozen_layers: int = 30,
+    max_seq_length: int = None,
 ):
     set_seed(seed)
     gradient_checkpointing=False
 
-    model, tokenizer = get_model_tokenizer(gradient_checkpointing=gradient_checkpointing)
+    model, tokenizer = get_model_tokenizer(pretrained_model_name_or_path=pretrained_model_name,
+                                           gradient_checkpointing=gradient_checkpointing)
 
     # Use the same max length that the model supports.  Try a couple different keys in case a different
     # model is used.  The default model uses n_positions.  If no config settings can be found just default
     # to 1024 as this is probably supported by most models.
     conf = model.config
-    default_length = 2048
-    max_length: int = 512 # getattr(conf, "n_positions", getattr(conf, "seq_lenth", default_length))
+    default_length = 1024
+    if not max_seq_length:
+        max_length: int = getattr(conf, "n_positions", getattr(conf, "seq_lenth", getattr(conf, "max_position_embeddings", default_length)))
+        print(f"===========Use model config max_length {model.config} : {max_length}====================")
+          
+    else:
+        max_length: int = max_seq_length 
+        print(f"===========Use customer config max_length : {max_length}====================")
+    
 
     processed_dataset = preprocess_dataset(tokenizer=tokenizer, max_length=max_length, seed=seed,
                                            local_data_file_path=local_data_file_path)
@@ -261,8 +228,7 @@ def train(
         output_dir=local_output_dir,
         per_device_train_batch_size=per_device_train_batch_size,
         per_device_eval_batch_size=per_device_eval_batch_size,
-        fp16=False,
-        bf16=bf16,
+        fp16=True,
         learning_rate=lr,
         num_train_epochs=epochs,
         deepspeed=deepspeed,
@@ -283,6 +249,32 @@ def train(
     )
 
     logger.info("Instantiating Trainer")
+    
+    frozen_layers_prefix = [f"gpt_neox.layers.{i}." for i in range(max_frozen_layers)] + ["embed_in"]
+    print(f"========== Frozen_layers_prefix:\n {frozen_layers_prefix}")
+    
+    model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+    params = sum([np.prod(p.size()) for p in model_parameters])
+    print(f" ======= Before frozen earlier layer, total trainable parameters: {params} =================== ")
+    
+    trainable_layers = []
+    non_trainable_layers = []
+    for name, param in model.named_parameters():
+        trainable = True
+        for layer_prefix in frozen_layers_prefix:
+            if layer_prefix in name:
+                param.requires_grad = False
+                trainable = False
+        if trainable:
+            trainable_layers.append(name)
+        else:
+            non_trainable_layers.append(name)
+    
+    model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+    params = sum([np.prod(p.size()) for p in model_parameters])
+    print(f" ========= After frozen earlier layer, trainable parameters: {params}! There are {trainable_layers} ")
+    print(f"========= Non-trainable parameters are {non_trainable_layers}!")
+    
 
     trainer = Trainer(
         model=model,
@@ -316,7 +308,10 @@ def train(
 @click.option("--seed", type=int, default=DEFAULT_SEED, help="Seed to use for training.")
 @click.option("--deepspeed", type=str, default=None, help="Path to deepspeed config file.")
 @click.option("--local-data-file-path", type=str, default="", help="""The local training data with list of json with `prompt` and `completion` as the key""")
-@click.option("--test-size", type=int, default=1000, help="Path to deepspeed config file.")
+@click.option("--pretrained-model-name", type=str, default=DEFAULT_INPUT_MODEL, help="""Model name""")
+@click.option("--test-size", type=int, default=1000, help="Test size.")
+@click.option("--max-seq-length", type=int, default=None, help="Max sequence length.")
+@click.option("--max-frozen-layers", type=int, default=0, help="Max sequence length.")
 @click.option(
     "--gradient-checkpointing/--no-gradient-checkpointing",
     is_flag=True,
